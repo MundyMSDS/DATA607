@@ -1,0 +1,184 @@
+---
+title: "Data 607 - Assignment 1"
+author: "James Mundy"
+date: "September 1, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Get The Data
+
+Use getURL function to get the data from my github repository. The assign the data to x. 
+
+```{r echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(RCurl)
+
+```
+
+```{r echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+x <- getURL("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/mushroom.csv")
+```
+
+## Import The Data
+
+Will utlized the tidyverse library and related tools to complete this assignment.
+
+```{r echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library (tidyverse)
+```
+
+
+```{r echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+mushrooms <-read_csv(x, col_names= c("isEdible",
+                                     "cap_shape",
+                                     "cap_surface",
+                                     "cap_color",
+                                     "bruises",
+                                     "odor",
+                                     "gill_attachment",
+                                     "gill_spacing",
+                                     "gill_size",
+                                     "gill_color",
+                                     "stalk_shape",
+                                     "stalk_root",
+                                     "stalk_surface_above_ring",
+                                     "stalk_surface_below_ring",
+                                     "stalk_color_above_ring",
+                                     "stalk_color_below_ring",
+                                     "veil_type",
+                                     "veil_color",
+                                     "ring_number",
+                                     "ring_type",
+                                     "spore_print_color",
+                                     "population",
+                                     "habitat")
+)
+
+```
+
+```{r}
+glimpse(mushrooms)
+```
+
+## Tidy The Data
+
+We will define each variable as a factor and then apply the required data transformations.
+
+```{r}
+mushrooms <- mushrooms %>% map_df(function(.x) as.factor(.x))
+
+levels(mushrooms$isEdible) <- c("edible", "poisonous")
+levels(mushrooms$cap_shape) <- c("bell", "conical", "flat", "knobbed", "sunken", "convex")
+levels(mushrooms$cap_color) <- c("buff", "cinnamon", "red", "gray", "brown", "pink", 
+                                 "green", "purple", "white", "yellow")
+levels(mushrooms$cap_surface) <- c("fibrous", "grooves", "scaly", "smooth")
+levels(mushrooms$bruises) <- c("no", "yes")
+levels(mushrooms$odor) <- c("almond", "creosote", "foul", "anise", "musty", "none", "pungent", "spicy", "fishy")
+levels(mushrooms$gill_attachment) <- c("attached", "free")
+levels(mushrooms$gill_spacing) <- c("close", "crowded")
+levels(mushrooms$gill_size) <- c("broad", "narrow")
+levels(mushrooms$gill_color) <- c("buff", "red", "gray", "chocolate", "black", "brown", "orange", 
+                                  "pink", "green", "purple", "white", "yellow")
+levels(mushrooms$stalk_shape) <- c("enlarging", "tapering")
+levels(mushrooms$stalk_root) <- c("missing", "bulbous", "club", "equal", "rooted")
+levels(mushrooms$stalk_surface_above_ring) <- c("fibrous", "silky", "smooth", "scaly")
+levels(mushrooms$stalk_surface_below_ring) <- c("fibrous", "silky", "smooth", "scaly")
+levels(mushrooms$stalk_color_above_ring) <- c("buff", "cinnamon", "red", "gray", "brown", "pink", 
+                                              "green", "purple", "white", "yellow")
+levels(mushrooms$stalk_color_below_ring) <- c("buff", "cinnamon", "red", "gray", "brown", "pink", 
+                                              "green", "purple", "white", "yellow")
+levels(mushrooms$veil_type) <- "partial"
+levels(mushrooms$veil_color) <- c("brown", "orange", "white", "yellow")
+levels(mushrooms$ring_number) <- c("none", "one", "two")
+levels(mushrooms$ring_type) <- c("evanescent", "flaring", "large", "none", "pendant")
+levels(mushrooms$spore_print_color) <- c("buff", "chocolate", "black", "brown", "orange", 
+                                         "green", "purple", "white", "yellow")
+levels(mushrooms$population) <- c("abundant", "clustered", "numerous", "scattered", "several", "solitary")
+levels(mushrooms$habitat) <- c("wood", "grasses", "leaves", "meadows", "paths", "urban", "waste")
+```
+
+Here are the transformed facators
+
+```{r}
+str(mushrooms)
+```
+
+Remove factor (veil_type) with one level.
+
+```{r}
+mushrooms <- mushrooms %>% select(- veil_type)
+```
+
+Check for missing data / values
+
+```{r}
+map_dbl(mushrooms, function(.x) {sum(is.na(.x))})
+```
+
+Remove gill_attachment because it has missing values
+
+```{r}
+mushrooms <- mushrooms %>% select(- gill_attachment)
+```
+
+Select isEdible and four or five other columns.
+
+```{r}
+mushrooms <- mushrooms %>% select(isEdible, odor, cap_surface, cap_color, gill_color, cap_shape)
+```
+
+Show summary of the mushrooms dataframe (tibble)
+
+```{r}
+summary(mushrooms)
+```
+
+
+
+## Explore The Selected Data
+
+Use ggplot2 to visulize the data to help determine the interesting variables. 
+
+```{r}
+ggplot(mushrooms, aes(x = cap_surface, y = cap_color, col = isEdible)) + 
+  geom_jitter(alpha = 0.5) + 
+  scale_color_manual(breaks = c("edible", "poisonous"), 
+                     values = c("green", "red"))
+```
+
+Fibrous mushrooms appear the safest to eat.
+
+```{r}
+ggplot(mushrooms, aes(x = cap_shape, y = cap_color, col = isEdible)) + 
+  geom_jitter(alpha = 0.5) + 
+  scale_color_manual(breaks = c("edible", "poisonous"), 
+                     values = c("green", "red"))
+```
+
+Bell shaped mushrooms seem like the safe bet. 
+
+```{r}
+ggplot(mushrooms, aes(x = gill_color, y = cap_color, col = isEdible)) + 
+  geom_jitter(alpha = 0.5) + 
+  scale_color_manual(breaks = c("edible", "poisonous"), 
+                     values = c("green", "red"))
+```
+
+```{r}
+ggplot(mushrooms, aes(x = isEdible, y = odor, col = isEdible)) + 
+  geom_jitter(alpha = 0.5) + 
+  scale_color_manual(breaks = c("edible", "poisonous"), 
+                     values = c("green", "red"))
+```
+
+
+
+'''
+***Inspiration***
+1. R for Data Science
+2. Machine Learning with R
+3. ggplot2 (the book)
+'''
