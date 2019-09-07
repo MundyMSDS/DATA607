@@ -1,0 +1,187 @@
+---
+title: "DATA 607 - Assignment 2"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment Overview
+
+Choose six recent popular movies. Ask at least five people that you know (friends, family, classmates, imaginary friends) to rate each of these movie that they have seen on a scale of 1 to 5. Take the results (observations) and store them in a SQL database. Load the information into an R dataframe. Your deliverables should include your SQL scripts and your R Markdown code, posted to GitHub. This is by design a very open ended assignment. A variety of reasonable approaches are acceptable. You can (and should) blank out your SQL password if your solution requires it; otherwise, full credit requires that your code is “reproducible,” with the assumption that I have the same database server and R software.
+
+## My Approach
+
+My approach to this assignment is as follows:
+
+* Created simple (unTidy) moviesurvey Mysql database to persist my survey data
+* Created Shiny App to take survey and store results in Mysql table.
+* Used DBI package to connect to Mysql table and create a tibble
+* Used tidyr::gather to Tidy moviesurvey data
+* Produced plot using tidy data and ggplot2
+
+## Shiny Survey App
+```
+Scoroll to see input section. 
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(shiny)
+library(RMySQL)
+
+options(mysql = list(
+  "host" = "127.0.0.1",
+  "port" = 3306,
+  "user" = "root",
+  "password" = "dolphin"
+))
+
+databaseName <- "moviesurvey"
+table <- "moviesurvey"
+
+saveData <- function(data) {
+  # Connect to the database
+  db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                  port = options()$mysql$port, user = options()$mysql$user, 
+                  password = options()$mysql$password)
+  # Construct the update query by looping over the data fields
+  query <- sprintf(
+    "INSERT INTO %s (%s) VALUES ('%s')",
+    table, 
+    paste(names(data), collapse = ", "),
+    paste(data, collapse = "', '")
+  )
+  # Submit the update query and disconnect
+  dbGetQuery(db, query)
+  dbDisconnect(db)
+}
+
+loadData <- function() {
+  # Connect to the database
+  db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                  port = options()$mysql$port, user = options()$mysql$user, 
+                  password = options()$mysql$password)
+  # Construct the fetching query
+  query <- sprintf("SELECT * FROM %s", table)
+  # Submit the fetch query and disconnect
+  data <- dbGetQuery(db, query)
+  dbDisconnect(db)
+  data
+}
+
+# Define the fields we want to save from the form
+fields <- c("name", "godfather", "shawshank", "schindler", "raging_bull", "casablanca", "citizen_kane")
+
+# Shiny app with 3 fields that the user can submit data for
+shinyApp(
+  ui = fluidPage(
+    titlePanel("Survey: Top Six Movies of All Time"),
+    h4("Rate each movie from 0 to 5 (zero=did not see - 5=highest rating)"),
+    h6(""),
+    DT::dataTableOutput("responses", width = 300), tags$hr(),
+    textInput("name", "Enter your Name to begin Survey:", ""),
+    sliderInput("godfather", "The Godfather (1972) R",
+                0, 5, 0, ticks = TRUE),
+    sliderInput("shawshank", "The Shawshank Redemption (1994) R",
+                0, 5, 0, ticks = TRUE),
+    sliderInput("schindler", "Schindler's List (1993) R",
+                0, 5, 0, ticks = TRUE),
+    sliderInput("raging_bull", "Raging Bull (1980) R  ",
+                0, 5, 0, ticks = TRUE),
+    sliderInput("casablanca", "Casablanca (1942)",
+                0, 5, 0, ticks = TRUE),
+    sliderInput("citizen_kane", "Citizen Kane (1941)",
+                0, 5, 0, ticks = TRUE),
+    actionButton("submit", "Submit")
+  ),
+  server = function(input, output, session) {
+    
+    # Whenever a field is filled, aggregate all form data
+    formData <- reactive({
+      data <- sapply(fields, function(x) input[[x]])
+      data
+    })
+    
+    # When the Submit button is clicked, save the form data
+    observeEvent(input$submit, {
+      saveData(formData())
+    })
+    
+    # Show the previous responses
+    # (update with current response when Submit is clicked)
+    output$responses <- DT::renderDataTable({
+      input$submit
+      loadData()
+    })     
+  }
+)  
+  
+
+```
+
+## Load Movie Survey In Tibble
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(dbplyr)
+library(DBI)
+library(RMySQL)
+library(tidyverse)
+library(kableExtra)
+
+
+con <- dbConnect(
+  drv = RMySQL::MySQL(),
+  dbname = "moviesurvey",
+  host = "127.0.0.1",
+  username = "root",
+  password = "dolphin"
+)
+
+sql <- "SELECT * from moviesurvey"
+rows <- dbGetQuery(con, sql)
+movie_survey <- as_tibble(rows)
+movie_survey %>% 
+  kable() %>% 
+  kable_styling()
+
+
+
+movies <- movie_survey %>% 
+  gather('godfather', 'shawshank', 'schindler', 'raging_bull', 'casablanca', 'citizen_kane', key="movie", value="rating")
+
+view(movies)
+
+
+```
+
+## Tidy Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+movies <- movie_survey %>% 
+  gather('godfather', 'shawshank', 'schindler', 'raging_bull', 'casablanca', 'citizen_kane', key="movie", value="rating")
+
+glimpse(movies)
+
+
+```
+
+## Plot Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+ggplot(movies, aes(name, rating)) +   
+  geom_bar(aes(fill = movie), position = "dodge", stat="identity") +
+  coord_flip()
+
+
+```
+
