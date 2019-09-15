@@ -1,0 +1,203 @@
+---
+title: "DATA 607 - Assignment 3"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(dbplyr)
+library(kableExtra)
+
+
+data607RegexChecker <- function(regex_strings,regex_pattern){
+  
+m <- str_extract_all(regex_strings,pattern=regex_pattern, simplify = TRUE)
+m <- rename(as_tibble(m), 'match' = "V1")
+
+m = m %>%
+ mutate(String = regex_strings) %>%
+ mutate(Match = ifelse(match=="",'No Match',match)) %>% 
+ select(String, Match)
+
+ kable(m, format = "markdown")  
+  
+}
+
+
+```
+
+###3. Create Strings. 
+
+Use the following string to complete the exercises:
+
+```{r}
+names <-"555-1239Moe Szyslak(636) 555-0113Burns, C. Montgomery555-6542Rev. Timothy Lovejoy555 8904Ned Flanders636-555-3226Simpson, Homer5553642Dr. Julius Hibbert"
+```
+
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+names <- str_extract_all(names,'[[a-zA-Z],. ]{2,}')
+names <- as_tibble(names, .name_repair="universal")
+names <- rename(names, 'name_strings'= '...1')
+
+names <- names %>%
+  mutate(Number = row_number() ) %>%
+  mutate(title = str_extract(name_strings,"^[a-zA-Z]{2,4}\\.")) %>% 
+  mutate(name_strings = str_replace_all(name_strings, "^[a-zA-Z]{2,4}\\.\\s",'' )) %>% 
+  mutate(first_name = str_trim(str_extract(name_strings,'^[a-zA-Z]+\\s?\\,?'))) %>% 
+  mutate(last_name = str_trim(str_extract(name_strings,'(\\s.*)$'))) %>% 
+  mutate(last_name = if_else(str_detect(first_name,'\\,'),first_name,last_name)) %>% 
+  mutate(first_name = if_else(str_detect(first_name,'\\,'),str_trim(str_extract(name_strings,'(\\s.*)$')),first_name)) %>% 
+  mutate(last_name = str_replace(last_name,'\\,','')) %>%
+  mutate(first_name_last_name = if_else(is.na(title),str_c(first_name, last_name, sep=' '),str_c(title, first_name, last_name, sep=' ')))
+```
+
+1. Use the tools of this chapter to rearrange the vector so that all the elements conform to the standard first_name last_name
+
+```{r}
+first_last <- names %>%
+  select(first_name_last_name) 
+  kable(first_last, format = "markdown")
+
+
+```
+
+
+2. Construct a logical vector indicating whether a character has a title (i.e. Rev., and Dr.)
+
+```{r}
+title_vector <- names %>%
+  mutate(has_title = str_detect(first_name_last_name, '^[a-zA-Z]{2,4}\\.')) %>% 
+  select(first_name_last_name, has_title)
+
+kable(title_vector, format = "markdown")
+
+
+```
+
+3. Construct a logical vector indicating whether a character has a second name.
+
+```{r}
+second_name_vector <- names %>% 
+  mutate(has_second_name = str_detect(first_name_last_name, '^[A-Z\\.]{2}\\s[a-zA-Z]+\\s[a-zA-z]+$')) %>% 
+  select(first_name_last_name, has_second_name)
+
+kable(second_name_vector, format = "markdown")
+
+```
+
+
+###4. Types of Strings
+
+Describe the types of strings that conform to the following regular expressions and construct an example that is matched by the regular expression. 
+
+
+1. Regular Expression Pattern:  [0-9]+\\$
+
+Description: One to unlimited digits followed by a single dollar sign ($).
+
+For example: 
+```{r}
+
+(data607RegexChecker(c("0$", "000r00?", "123456$", "1111111111$", "go_yankees!"),
+                     "[0-9]+\\$" ))
+
+```
+
+
+2. Regular Expression Pattern: \\b[a-z]{1,4}\\b
+
+Description: This will match lower case character strings of length 1 to 4.
+
+For example: 
+```{r}
+
+(data607RegexChecker(c("a", "abcd", "abcD", "go", "yank"),
+                     "\\b[a-z]{1,4}\\b" ))
+
+```
+
+
+3. Regular Expression Pattern: .*?\\.txt$
+
+Description: Matches any character except line termination 0 to unlimited times, followed by a period and finally followed by the characters txt. This appears to be a DOS statement that looking for all files that end in .txt.
+
+For example: 
+
+```{r}
+
+(data607RegexChecker(c("resume.txt", "memo.txt", "spreadsheet.xls", "go.txt", "file.pdf"),
+                     ".*?\\.txt$" ))
+
+```
+
+
+
+4. Regular Expression Pattern: \\d{2}/\\d{2}/\\d{4}
+
+Description: Two digits followed by a back slash followed by Two digits followed by a back slash followed by four digits. In other word this could represent a tranditional date format. 
+
+For example: 
+
+```{r}
+
+(data607RegexChecker(c("04/07/1963", "05/19/1998", "09/11/2001", "8/7/1980", "09/15/2019"),
+                     "\\d{2}/\\d{2}/\\d{4}" ))
+
+```
+
+
+
+5. Regular Expression Pattern: <(.+?)>.+?</\\1>
+
+Description: This matches html data.Intially it matches the beginning tag, any 1 to unlimited character(s) inside the first brackets (<>), next it matches any 1 to unlimited characters (between the brackets) and finally it matches the ending brackets and uses the result from the 1st capture group (\\1) in the end bracket( </\\1> ), thus eliminating the need to match something that has already been matched.
+
+```{r}
+
+m <- str_extract_all(c("<H1> This is a header </H1>", "<p> This is a paragraph </p>","<date> 12/13/234</date>", "<ul>unordered list</ul>", "Date"),"<(.+?)>.+?</\\1>", simplify = TRUE)
+
+m
+```
+
+
+6. Bonus:  Shinny R-flavored Regex Tester
+
+Here is a link to a shiny regex tester that allows you to use R-flavored regular expressions. I used it to test my expressions.
+
+https://adamspannbauer.github.io/2018/01/16/r-regex-tester-shiny-app/
+
+
+
+
+###9. Secret Message
+
+The following code hides a secret message. Crack it with R and regular expressions.  Hint: Some of the characters are more revealing than others! The code snippet is also available in the materials at www.r-datacollection.com
+
+```{r}
+code = "clcopCow1zmstc0d87wnkig7OvdicpNuggvhryn92Gjuwczi8hqrfpRxs5Aj5dwpn0TanwoUwisdij7Lj8pf03AT5Idr3coc0bt7yczjatOaootj55t3Nj3ne6c4Sfek.r1w1YwwojigOd6vrfUrbz2.2bkAnbhzgv4R9i05zEcrop.wAgnb.SqoU65fPa1otfb7wEm24k6t3sR9zqe5fy89n6Nd5t9kc4fE905gmc4Rgxo5nhDk!gr"
+```
+
+There appears to be more lowercase characters than uppercase, so I will strip all the lower case characters and see what that yields:
+
+```{r}
+secret_message <- str_replace_all(code,'[a-z\\s\\d]+','')
+secret_message <- str_replace_all(secret_message,'[\\.]',' ')
+
+```
+
+**THE SECRET MESSAGE IS:** `r secret_message`.
