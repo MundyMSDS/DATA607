@@ -1,0 +1,123 @@
+---
+title: "DATA 607 - Assignment 4"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(kableExtra)
+
+```
+
+## My Approach
+
+My approach for this project follow:
+
+* Import data using readr (used fixed length file)
+* Use the Tidyverse to wrangle data into the desired form
+* Write a CSV file using readr
+* Import csv file using Shiny App 
+
+Note: Inspiration and code for shiny app come from https://www.youtube.com/watch?v=HPZSunrSo5M
+
+## Import Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+columns <- c("player","c2","c3","c4","c5","c6","c7","c8","c9","c10")
+delo <- read_fwf("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/elodataset.txt", fwf_widths(c(6, 32, 7,7,6,6,6,6,6,6), columns),skip=4, comment="-")
+glimpse(delo)
+```
+
+## Wrangle Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+d <- delo %>% 
+  mutate(c2= str_trim(str_sub(c2,2,29),side="both")) %>% 
+  mutate(c3 = str_trim(str_sub(c3,2,6),side="both")) %>%
+  mutate(c4 = str_trim(str_sub(c4,2,6),side="both")) %>%
+  mutate(c5 = str_trim(str_sub(c5,2,6),side="both")) %>%
+  mutate(c6 = str_trim(str_sub(c6,2,6),side="both")) %>%
+  mutate(c7 = str_trim(str_sub(c7,2,6),side="both")) %>%
+  mutate(c8 = str_trim(str_sub(c8,2,6),side="both")) %>%
+  mutate(c9 = str_trim(str_sub(c9,2,6),side="both")) %>%
+  mutate(c10 = str_trim(str_sub(c10,2,6),side="both")) %>% 
+  mutate(c11 = if_else(str_detect(player,"\\d"),lead(player),"")) %>% 
+  mutate(c12 = if_else(str_detect(player,"\\d"),lead(c2),"")) %>% 
+  filter(str_detect(player,"\\d")) %>% 
+  mutate(c4=as.integer(str_replace_all(c4,"[WLDHU]\\s",""))) %>%
+  mutate(c5=as.integer(str_replace_all(c5,"[WLDHU]\\s",""))) %>%
+  mutate(c6=as.integer(str_replace_all(c6,"[WLDHU]\\s",""))) %>%
+  mutate(c7=as.integer(str_replace_all(c7,"[WLDHU]\\s",""))) %>%
+  mutate(c8=as.integer(str_replace_all(c8,"[WLDHU]\\s",""))) %>%
+  mutate(c9=as.integer(str_replace_all(c9,"[WLDHU]\\s",""))) %>%
+  mutate(c10=as.integer(str_replace_all(c10,"[WLDHU]\\s",""))) %>% 
+  mutate(c12 = str_replace_all(c12,"\\d{8}\\s\\/\\sR\\:\\s","")) %>% 
+  separate(c12, into=c("c13", "c14"), sep = "->", remove = FALSE) %>% 
+  mutate(c13 = str_extract(c13,"\\d{3,4}"))
+
+d2 <- d  %>% 
+  select(c2,c11,c3, c13,c4:c10) %>% 
+  gather(c4:c10, key="match", value="player") %>% 
+  arrange(c2) %>%
+  mutate(player = as.character(player)) %>% 
+  select(-match)
+  
+
+d3 <- d %>% 
+  select (player, c13)
+ 
+result <- left_join(d2, d3, by ="player") %>% 
+  group_by(c2, c11,c3, c13.x) %>%  
+  summarize(score = mean(as.integer(c13.y), na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(score = as.integer(score)) %>% 
+  rename(Name=c2, State=c11, Ttl_Points =c3, Pre_Rating = c13.x, Avg_Opp_Rating = score) %>% 
+  arrange(desc(Avg_Opp_Rating))
+
+```
+
+## Elo Data Output
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+  kable(result, format = "markdown")
+
+```
+
+
+## Write Data To CSV File
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+  
+  result <- format_csv(result)
+  setwd(file.path("C:","Users", "mutue", "OneDrive", "Documents", "Data607"))
+  write_file(result,"elo_data.csv")
+  
+```
+
+
+## Shiny App
+
+
+Click this link to access the Shiny App.  Use the App to access your ELO CSV file or other csv file. 
+
+Link to App:  https://mundymsds.shinyapps.io/EloApp/
+
+
+
+
