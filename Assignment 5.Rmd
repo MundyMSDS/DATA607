@@ -1,0 +1,110 @@
+---
+title: "DATA 607 - Assignment 5"
+author: "Jim Mundy"
+output:
+  html_document:
+    css:
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(kableExtra)
+library(hrbrthemes)
+library(reshape2)
+
+```
+
+## My Approach
+
+My approach follows:
+
+* Created csv file per assignment requirments.
+* Used Readr to read the file into R
+* Utilized Tidyverse tools to tidy and transform data.
+* Presented data in table and graph formats.
+
+## Read Data into R
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+delay_data <- read_csv("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/airline_delays.csv")
+
+head(delay_data)
+```
+
+## Tidy the Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+
+delay_data <- delay_data %>% 
+  mutate(X1=if_else(is.na(X1),lag(X1),X1)) %>%
+  drop_na() %>% 
+  gather(`Los Angeles`, Phoenix, `San Deigo`, `San Francisco`, Seattle, key="City", value = "Count") %>% 
+  spread("X2", "Count",  3:7) %>% 
+  rename(Airline = X1, Delayed = delayed, `On Time` = `on time`) %>% 
+  mutate(Total = Delayed + `On Time`) %>% 
+  mutate(`On Time %` = `On Time` / Total) %>% 
+  mutate(`Delay %` = Delayed / Total) %>%
+  mutate(`Is Hub` = if_else(Airline=="Alaska" & City =="Seattle" |Airline=="AM West" & City =="Phoenix", "Yes", "No" )) %>% 
+  arrange(Airline, Delayed)
+
+
+
+```
+
+
+## Analysis
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+kable(delay_data, format = "markdown")
+
+delay_data <- delay_data %>% 
+  select(Airline, City, Delayed, `On Time`) %>%
+  mutate(City = if_else(City == "Los Angeles", "LA", City)) %>% 
+  mutate(City = if_else(City == "San Francisco", "SF", City)) %>% 
+  mutate(City = if_else(City == "San Deigo", "SD", City)) %>%
+  mutate(City = if_else(City == "Phoenix", "PHX", City)) %>%
+  mutate(City = if_else(City == "Seattle", "STL", City)) %>%
+  melt()
+
+ggplot(delay_data, aes(x = City, y = value, fill = variable)) +
+   geom_bar(stat = 'identity') +
+   geom_text(size = 3, aes(label = value),  position = position_stack(vjust = 0.5)) +
+   labs(y = "flights") +
+   labs(x="", y="Count",
+       title="Flight Delays",
+       subtitle="Alaska Air vs. America West",
+       caption="Brought to you by the Tidyverse") + 
+   theme_ipsum(grid="Y") +
+   facet_grid(~ Airline)
+
+  
+
+```
+
+
+
+## Findings
+
+* More flights mean more delays - Hubs (Seattle:Alaska, Phoenix:Am West) had highest delays for each airline.
+
+* Alaska Airlines has a better track record for delays versus AM West.  
+
+* Alaska Air's highest on time percentage is at American West's hub (Phoenix)
+
+* Delays are positively correlated to precipitation. 
+
+
+
