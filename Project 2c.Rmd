@@ -1,0 +1,140 @@
+---
+title: "DATA 607 - Project 2c - Census Data Income vs Educational Attainment 2018"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(modelr)
+library(RCurl)
+library(tidyr)
+library(kableExtra)
+library(plotly)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+## The Data
+
+#### This is a relatively clean data set. Potential area for tidying include:
+
+* __Some additional binning__ - The data set is comprised of three distinct, yet related, data sets.
+* __Merged Header__ - The file has a merged header and will require some clean-up
+* __Filter__ - Filtering rows that are not needed for analysis
+* __Missing and Incomplete Data__ - There is a need to deal with incomplete and/or missing data
+* __Skip Rows__ - Willl need to skip rows during data import due to blank space and a fat header.
+
+## My Game Plan
+
+#### My game plan for this data set follows:
+
+* Import the data 
+* Tidy the data
+* Use ggplot to determine correlations and insights
+
+## My Question
+
+#### Indentify correlation between income and educational attainment.
+
+## Transform Data
+
+#### The steps to transform the dataset are set forth below:
+
+(1)  __Import Data__
+
+#### Utilize readr with skip parameter of 11 to import the data.  
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+inc <- getURL("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/inc2edu.csv")
+
+inc <- read_csv(inc, skip = 11)
+
+  kable(head(inc)) %>%
+  kable_styling
+  
+  
+```
+
+
+
+
+3.  __Tidy the Data__
+
+#### This step will include renaming, filtering, mutate and gathering activities, oh my!:
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+inc <- inc %>%
+  
+  #Rename and select columns
+  rename(Bin1 = X1,HS_No = X3,HS_Grad =5, Col_Some = X6, Col_AS=X7,Col_BS =9, Col_MS=10, Col_PD=11, Col_Phd=12) %>% 
+  select(-X2) %>% 
+  select(-Total) %>% 
+  rename(HS_DO =3) %>%
+  
+  #filter out the non bin rows
+  filter(str_detect(Bin1, '\\$')) %>%
+  
+  #create id number 
+  mutate(id = row_number() ) %>%
+  
+  #create a less granular Bin
+  mutate(Bin2 = if_else(id<=10, "Lt24","other")) %>%
+  mutate(Bin2 = if_else(id>10 & id <=20 & Bin2=="other", "Lt50",Bin2)) %>%
+  mutate(Bin2 = if_else(id>20 & id <=30, "Lt75",Bin2)) %>%
+  mutate(Bin2 = if_else(id>30 & id <=40, "Lt99",Bin2)) %>%
+  mutate(Bin2 = if_else(id>40, "Mt100",Bin2)) %>% 
+  
+  #Convert data from wide to skinny
+  gather(HS_No, HS_DO, HS_Grad, Col_Some, Col_AS, Col_BS, Col_MS, Col_PD, Col_Phd, key = "Education", value ="N")
+    
+  kable(head(inc)) %>%
+  kable_styling  
+  
+```
+
+4.  __Explore The Tidy Data Set__
+
+#### I'm going to use a plotly bar chart with a facet_wrap by educational attainment to answer the question.
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+p <- ggplot(data=inc, aes(x=Bin2, y = N)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Education) +
+  ggtitle("Income vs Educational Attainment - 2018 Census Data")
+  
+
+p <- ggplotly(p)
+p
+  
+
+
+```
+
+
+
+## Answers / Observations
+
+####  Indentify if income and educational attainment are correlated.:
+
+*  The chart above shows a positive correlation between educational attainment and income.
+*  High school drop outs and individuals who did not attend high school have the lowest incomes in 2018
+*  Highest income go to Bachelor, Masters, Phd and Professal degree holders.
+*  There are a relatively small number of Phd and Professional degree holders but salaries are high ($100K) for these degreess.
+*  All education levels have some individuals earning more than $100K. 
+
+

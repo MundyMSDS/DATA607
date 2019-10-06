@@ -1,0 +1,244 @@
+---
+title: "DATA 607 - Project 2b - UN Migration Data"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(modelr)
+library(RCurl)
+library(tidyr)
+library(kableExtra)
+library(plotly)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+## The Data
+
+#### The data is UN estimated refugee stock at mid-year by country for 1990 - 2015 (five year increments). Key observations include:
+
+* __Three in One__ - The data set is comprised of three distinct, yet related, data sets.
+* __Need for Conversion__ - Will need to convert the numeric data from character back to numeric
+* __Selects to get to working sets__ - Certain data subsets will need to be removed
+* __Missing and Incomplete Data__ - There is a need to deal with incomplete and/or missing data
+* __Skip Rows__ - Willl need to skip rows during data import due to blank space and a fat header.
+
+
+## My Game Plan
+
+#### My game plan for this data set follows:
+
+* Use readr to bring in the data (will need to skip numerous rows)
+* Select a subset of data for my wrangling and analysis
+* Clean up the data to include converting from text to numeric, column headers, removal of missing / incomplete data
+* Employ a list column and develop models and/or plots for each region
+* Analyze the models / plots 
+* Leverage chapter 20 of R for Data Science (Gapminder analysis)
+
+## My Questions
+
+#### Indentify keys trends in the UN refugee data.
+
+## Transform Data
+
+#### The steps to transform the dataset are set forth below:
+
+(1)  __Import Data__
+
+#### Utilize readr with skip parameter of 15 to import the data.  The import was fairly clean.
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+u <- getURL("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/UN_MigrantStockTotal_2015.csv")
+
+un_data <- read_csv(u, skip =15)
+
+head(un_data)
+  
+```
+
+
+
+2.  __Get To A Good Starting Point__
+
+#### Clean up the column names and select the columns I'd like to work with 
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+un_data <- un_data %>% 
+  select(-X3) %>%
+  
+  #chaning column names
+  rename(id =X1, country = X2, loc_code = X4) %>% 
+  
+  #removing colunm that are not need for analysis
+  select(-ends_with("_1"),-contains("-"),-starts_with("X"))
+  
+
+  head(un_data) %>%
+  kable() %>%
+  kable_styling()
+
+
+
+
+```
+
+
+3.  __Data Wrangling / Transform__
+
+#### This step will include primary tidying activities with an end game of a Tidy Data set:
+
+* __Add new columns__ 
+* __Convert numeric data to numeric data type__
+* __Separate coutry from regions__
+* __Gather data__
+* __Sort data by country and year__
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+un_data <- un_data %>% 
+  #identifying key regions
+  mutate(region = if_else(loc_code==903|loc_code==935|loc_code==908|loc_code==904|loc_code==909|loc_code==905, country,"")) %>% 
+  filter(id > 6) %>%
+  
+  #creating region column
+  mutate(region = na_if(region,"")) %>% 
+  fill(region) %>%
+  
+  #Filtering out region rows
+  filter(loc_code <900) %>%
+  
+  #Converting numeric strings to doubles
+  mutate(`1990` = as.double(str_replace_all(`1990`,' ',""))) %>%
+  mutate(`1995` = as.double(str_replace_all(`1995`,' ',""))) %>%
+  mutate(`2000` = as.double(str_replace_all(`2000`,' ',""))) %>%
+  mutate(`2005` = as.double(str_replace_all(`2005`,' ',""))) %>%
+  mutate(`2010` = as.double(str_replace_all(`2010`,' ',""))) %>%
+  mutate(`2015` = as.double(str_replace_all(`2015`,' ',""))) %>%
+  
+  #Filter out rows with NA or zeros
+  filter(!is.na(`1990`)&!is.na(`2000`)&!is.na(`2005`)&!is.na(`2010`)&!is.na(`2015`)) %>%
+  filter(`1990`!=0&`2000`!=0&`2005`!=0&`2010`!=0&`2015`!=0) %>%
+  
+  #Gather the year column 
+  gather(`1990`,`1995`,`2000`,`2005`,`2010`,`2015`,key="year", value ="refugees") %>% 
+  arrange(country, year) 
+  
+
+```
+
+4.  __Explore The Tidy Data Set__
+
+#### I'm going to use ggplot to take a look at the data to see what it tells me.
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+
+  p<- ggplot(un_data, aes(year, refugees, group=country)) +
+   geom_line(alpha = 1/3)
+
+ p <- ggplotly(p)
+
+ p  
+
+
+```
+
+#### There seems to be a lot going on in the plot, some countries have declining refugees, while others are increasing and other its hard to tell because the change is slight. There are so many countries, there's a bit of a signal to noise issues.  To deal with the large number of countries, I will create a nested data data fram and continue my analysis. Using plotly enables me to inspect the plot data easily. 
+
+5.  __Create A List Column__
+
+#### Use nest() function to create a nested data frame. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+by_country <- un_data %>% 
+  group_by(country, region) %>% 
+  nest()
+
+by_country
+
+```
+
+6.  __Create a Country Model__
+
+####Here I calculate the model using the country_model function and add the model residuals. This will enable me to plot the model residuals
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+country_model <- function(df) {
+  lm(refugees ~year, data=df)
+}
+
+by_country <- by_country %>% 
+  mutate(model=map(data,country_model)) %>%
+  mutate(resids = map2(data, model, add_residuals)) %>% 
+  arrange(region, country)
+  
+by_country
+
+resids <- unnest(by_country, resids)
+resids
+
+ 
+p <-  ggplot(resids, aes(year, resid)) +
+  geom_line(aes(group=country), alpha=1/2) +
+  geom_smooth(se=FALSE)
+
+p <- ggplotly(p)
+
+p
+
+```
+
+7.  __Review Model Residuals__
+
+####Here I calculate the model using the country_model function and add the model residuals. This will enable me to plot the model residuals. I will use plotly so I can work with the plots to identify insights. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+
+resids %>% 
+  ggplot(aes(year, resid)) +
+  geom_line(aes(group=country), alpha=1/2) +
+  geom_smooth(se=FALSE)
+
+p <- ggplot(resids, aes(year, resid, group=country)) +
+  geom_line(alpha = 1/3) +
+  facet_wrap(~region)
+
+p <- ggplotly(p)
+
+p
+
+```
+
+#### The model seems to work fairly well, but there appear to be several countries in each region that the model does not fit well.  This indicates the refugee data is not linear for all countries. 
+
+## Answers
+
+#### Indentify keys trends in the UN refugee data.
+
+#### Key trends in the Refugee data include:
+
+*  The big movers in the refugee data include: Jordan, Iran, Malawi and Pakistan
+*  There is not much activy in the Oceania region to report
+*  The US has had a pattern of increasing and decreasing refugees approximately every five years. 
+*  Within Europe Germany and Serbia show the highest refugee residuals (non linear activity) 
+*  The number of Pakistanian and Iranian refugees has fallen significantly since 1990
+*  Jordan and Palestine have shown the largest increases in refugees since 1990
+
