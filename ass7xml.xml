@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<books>
+    <book id="1">
+        <Title>Efficiency of Racetrack Betting Markets</Title>
+        <Author>Donald B. Hausch,Victor S.Y. Lo, William T. Ziemba</Author>
+        <Subject>Academic Finance - Betting Markets</Subject>
+        <Publisher>World Scientific</Publisher>
+        <Year>2012</Year>
+	<ISBN>9812819185</ISBN>
+    </book>
+    <book id="2">
+        <Title>Precision: Statistical and Mathematical Methods in Horse Racing</Title>
+        <Author>C X Wong</Author>
+        <Subject>Quantitative Methods in Horse Racing</Subject>
+        <Publisher>Outskirts Press</Publisher>
+        <Year>2011</Year>
+	<ISBN>978143276852</ISBN>
+    </book>
+    <book id="3">
+        <Title>The Odds Must Be Crazy: Beating the Races with the Man Who Revolutionized Handicapping</Title>
+        <Author>Len Ragozin</Author>
+        <Subject>Handicapping-Figure Making</Subject>
+        <Publisher>Little, Brown and Company</Publisher>
+        <Year>1997</Year>
+	<ISBN>9781432768522</ISBN>
+    </book>
+</books>
