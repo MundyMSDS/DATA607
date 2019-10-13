@@ -1,0 +1,117 @@
+---
+title: "DATA 607 - Assignment 7"
+author: "Jim Mundy"
+output:
+  html_document:
+    css:
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Read in R Packages
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(kableExtra)
+library(XML)
+library(jsonlite)
+library(rvest)
+library(knitr)
+library(DT)
+library(httr)
+library(prettydoc)
+```
+
+## My Approach
+
+#### My approach follows:
+
+* I created the three files by hand using the brackets editor.
+* I will use rvest, XML and jsonlite packages to parse the html, xml and json files, repectively.
+* Once imported I will use the kableExtra package to display each of the files
+* Use all.equal and/or identical functions to determine if the data frames are identical
+
+
+## The Data
+
+##### The three files are stored on my Data607 github repository:
+
+https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7Html.html
+
+https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7xml.xml
+
+https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7json.json"
+
+
+## Import Data
+
+#### 1 HTML File
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+myHtml <- read_html("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7Html.html")
+
+myHtml <- myHtml %>% 
+html_table() %>% 
+as.data.frame(stringsAsFactors = FALSE) 
+myHtml %>% 
+kable() %>% 
+kable_styling(bootstrap_options = "responsive")
+
+
+```
+
+
+
+### 2. XML File
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+url <- "https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7xml.xml"
+xmlDoc = GET(url)
+xmlDoc <- xmlTreeParse(xmlDoc, useInternal=TRUE)
+myXml <- xmlToDataFrame(xmlDoc, stringsAsFactors = FALSE)
+
+myXml %>% 
+kable() %>% 
+kable_styling(bootstrap_options = "responsive")
+
+
+```
+
+
+### 3. JSON File
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+url <- "https://raw.githubusercontent.com/MundyMSDS/DATA607/master/ass7json.json"
+
+myjson <- fromJSON(url) 
+
+myjson %>% 
+kable() %>% 
+kable_styling(bootstrap_options = "responsive")
+
+
+```
+
+
+## Are The Files Identical
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+all.equal(myHtml, myXml)
+identical(myHtml, myXml)
+
+```
+
+##### The all.equal and identical functions indicate that the table/files are not identical. The reason for this is that Year and ISBN are numeric in some files and characters in others. The characters variables could easily be coersed to numerics, thus rendering the files identical. 
