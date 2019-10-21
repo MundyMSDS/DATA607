@@ -1,0 +1,195 @@
+---
+title: "DATA 607 - Project 3 - Job Skills"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: ./lab.css
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+## Load the libraries
+
+##### Load libraries required to complete the project. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library (RCurl)
+library(rvest)
+library(XML)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(wordcloud)
+library(RColorBrewer)
+
+```
+
+## My Approach
+
+#### I will utilize the Indeed.com website and perform Data Science search in the Boston Market,
+* Use the rvest library for the screen scraping tasks
+* Write functions to obtain links to job descriptions and to extract job descriptions
+* Use tidyverse to summarize data
+* Present results in table and word cloud formats
+
+
+
+
+
+## Extract Data From Indeed.com
+
+#### Utilize rvest and a couple of helper functions to extract the job description links and then use those links to extract the actual job descriptions.  I also calculate the number of job description pages available and use that in the getLinks() function.  I've also included a min value in the page calculation owing to the long running nature of the script.  The output from this section is a tibble with job descriptions. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+URL <- 'https://www.indeed.com/jobs?q=data+science&l=Boston%2C+MA'
+
+# find number of pages in table
+
+pgs <- read_html(URL)
+
+pgs <- html_text(html_nodes(pgs, "#searchCountPages")) %>%
+  str_extract("\\d\\d?\\d?\\sjobs") %>% 
+  str_extract("\\d{1,4}") %>% 
+  as.integer()/10-10 %>% 
+  as.integer() 
+
+pgs <- min(100,as.integer(pgs/10)*100)
+
+#scrape the indeed pages 
+
+getLinks=function(pg){
+  url=paste0("https://www.indeed.com/jobs?q=Data+Science&l=Boston%2C+MA&start=",pg)
+  
+  l <- read_html(url) %>%
+    html_nodes("div") %>%
+    html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
+    html_attr("href") %>% 
+    as_tibble()
+  
+  l
+  
+}
+
+
+getDesc=function(desc_link){
+  url= desc_link
+  
+  d <- read_html(url) %>%
+    html_nodes(xpath = '//*[@id="jobDescriptionText"]') %>%
+    html_text()
+}
+
+
+#purrr for each page
+
+df=seq(10,pgs,10)%>%
+  map_df(.,getLinks)
+
+
+df <- df %>% 
+  rename(job_link = value) %>%
+  filter(str_detect(job_link,'pagead')) %>% 
+  mutate(job_link = str_c("https://indeed.com",job_link,sep=''))
+
+indeedDesc <- as_tibble()
+
+counter <- seq(1,nrow(df),1)
+desc 
+for(i in counter) {
+  job_description <- getDesc(df[[i,1]])
+  job_description <- trimws(job_description,"both")
+df2 <- as_tibble(job_description)
+indeedDesc <- rbind(indeedDesc, df2)
+  
+}
+```
+
+
+
+## Summarize Data
+
+#### Leverage dplyr to summarize the job skills data. I determine if a particular skill is determined in each job description.  If it is included, I assign a value of 1 and a 0 if not.  Next I group by skill and calculate totals and percentage.  Finally the tibble is sorted in descending order.  
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+
+df <- as_tibble(indeedDesc) %>% 
+  rename(JobDesc = value) %>%
+  rowid_to_column("id") %>%
+  mutate(n = n()) %>% 
+  mutate(job = str_c("job",id,sep='')) %>% 
+  mutate(JobDesc = str_replace_all(JobDesc,'\n',' ')) %>% 
+  mutate(JobDesc = str_replace_all(JobDesc,'\\<U+00B7\\>','')) %>% 
+  mutate(Python = if_else(str_detect(JobDesc,fixed('python',ignore_case = TRUE)),1,0)) %>%
+  mutate(Excel = if_else(str_detect(JobDesc,fixed('Excel',ignore_case = TRUE)),1,0)) %>%
+  mutate(Mongodb = if_else(str_detect(JobDesc,fixed('Mongo',ignore_case = TRUE)),1,0)) %>%
+  mutate(R = if_else(str_detect(JobDesc,fixed('R,',ignore_case = TRUE)),1,0)) %>%
+  mutate(CompSci = if_else(str_detect(JobDesc,fixed('Computer Science',ignore_case = TRUE)),1,0)) %>%
+  mutate(Communication = if_else(str_detect(JobDesc,fixed('Communication Skills',ignore_case = TRUE)),1,0)) %>%
+  mutate(SQL = if_else(str_detect(JobDesc,fixed('SQL',ignore_case = TRUE)),1,0)) %>% 
+  mutate(AI = if_else(str_detect(JobDesc,fixed('Artificial',ignore_case = TRUE)),1,0)) %>%
+  mutate(Predictive = if_else(str_detect(JobDesc,fixed('predictive',ignore_case = TRUE)),1,0)) %>%
+  mutate(ML = if_else(str_detect(JobDesc,fixed('machine learning',ignore_case = TRUE)),1,0)) %>%
+  mutate(Statistics = if_else(str_detect(JobDesc,fixed('Statistics',ignore_case = TRUE)),1,0)) %>%
+  mutate(BigData = if_else(str_detect(JobDesc,fixed('Big Data',ignore_case = TRUE)),1,0)) %>%
+  mutate(Neural = if_else(str_detect(JobDesc,fixed('Neural',ignore_case = TRUE)),1,0)) %>%
+  mutate(Visualization = if_else(str_detect(JobDesc,fixed('visualization',ignore_case = TRUE)),1,0)) %>%
+  mutate(Regression = if_else(str_detect(JobDesc,fixed('Regression',ignore_case = TRUE)),1,0)) %>%
+  mutate(TextMining = if_else(str_detect(JobDesc,fixed('text minging',ignore_case = TRUE)),1,0)) %>%
+  mutate(Matlab = if_else(str_detect(JobDesc,fixed('Matlab',ignore_case = TRUE)),1,0)) %>%
+  mutate(SAS = if_else(str_detect(JobDesc,fixed('SAS',ignore_case = TRUE)),1,0)) %>%
+  mutate(Cloud = if_else(str_detect(JobDesc,fixed('Cloud',ignore_case = TRUE)),1,0)) %>%
+  gather('Python', 'R', 'SQL', 'AI', 'Predictive', 'ML', 'Statistics', 'BigData', 'Neural', 'Regression', 'TextMining', 'Matlab','SAS','Cloud', 'Visualization', 'Excel', 'Mongodb', 'CompSci','Communication',key=skill, value=value) %>% 
+  mutate(Percent = round((value / n)* 100)) %>% 
+  select(skill, value, Percent) %>% 
+  group_by(skill) %>% 
+  summarize(value = sum(value), Percent=sum(Percent)) %>%
+  arrange(desc(value))
+
+cloud_df <- df
+                      
+```
+
+
+## Job Skills Sorted Table
+
+#### The table below sets forth the relative demand for key data scientist skills. Value represents the number of job descriptions that contained the particular skill.  Percent is calculated by dividing value by the number of job descriptions in the analysis.
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+df %>% 
+  kable() %>% 
+  kable_styling()
+
+
+```
+
+## Word Cloud
+
+#### The word cloud is an alternative presentation of the table above.
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+par(bg='white') # set plot background to white
+
+#Primary world cloud inputs are skill and percent
+wordcloud(words=cloud_df$skill, freq=cloud_df$Percent,
+scale=c(7,.5), # range of the word size
+random.order=FALSE, # plot words in decreasing freq value
+random.color=FALSE, # word color based upon freq value
+rot.per= 0, # proportion of words with 90 degree rotation
+colors=brewer.pal(n=12, name="Dark2")) # n=number of colors to use; name= name of color palette
+
+
+
+```
