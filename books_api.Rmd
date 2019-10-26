@@ -1,0 +1,81 @@
+---
+title: "DATA 607 - Assignment 9"
+author: "Jim Mundy"
+output:
+  html_document:
+    css: 
+    highlight: pygments
+    theme: cerulean
+    toc: false
+    toc_float: false
+  pdf_document: default
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+#Load Libraries
+library(httr)
+library(jsonlite)
+library(knitr)
+library(DT)
+library(tidyverse)
+library(kableExtra)
+library(shiny)
+library(shinydashboard)
+```
+
+## Overview
+
+
+#### The New York Times Best Seller App queries the New York Times Book Api and presents best seller lists by Genre. A user can select a best seller list from the drop down box and click the Update button to retrieve a list of interest.  The App relies upon the getData() helper function that is stored in the helpers.R file. This script links to the helpers.R file via the source() function. The also App leverages Shiny's reactive functionality to retrieve the selected list and update the datatable once the Update button is clicked. An R datatable is used to display the data, including book cover images. The datatable's built in sorting, filtering, searching and pagination are added bonuses for the App. 
+
+## New York Times Best Seller App
+
+```{r echo=FALSE}
+
+#helpers.R houses the getData function that queries the NYT API for the best sellers. I linking to that file here.
+
+source("helpers.R")
+
+#Gets the initial data once the App opens. 
+
+books <- getData("hardcover-fiction")
+
+```
+
+
+```{r echo=FALSE}
+RV <- reactiveValues(data = books)
+
+shinyApp(
+  
+ui <- dashboardPage(
+      dashboardHeader(),
+      dashboardSidebar(selectInput(inputId = "books",label = "Select List & Update",choices = c("hardcover-fiction","hardcover-nonfiction","business-books","e-book-fiction","combined-print-and-e-book-fiction", "combined-print-and-e-book-nonfiction"),selected = "hardcover-fiction",selectize = FALSE),actionButton("do", "Update")),
+      dashboardBody(h1("Best Seller List"), br(), DT::dataTableOutput("mytable"))
+    ),
+
+    server <- function(input, output, session) {
+      output$mytable <- DT::renderDataTable({ DT::datatable(RV$data, escape = F)})
+    
+    #A test action button
+    observeEvent(input$do, {
+      books <- getData(input$books)
+      RV <- reactiveValues(data = books)
+      RV$data <- RV$data
+      output$mytable <- DT::renderDataTable({ DT::datatable(RV$data, escape = F)})
+    })    
+      
+      
+    },
+  options = list(height =1000)  # Controls the height of the Shiny display
+)
+    
+
+
+
+```
