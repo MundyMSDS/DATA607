@@ -1,0 +1,141 @@
+---
+title: "DATA 607 - Assignment 12"
+author: "Jim Mundy"
+output:
+  html_document:
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+
+```{r include=FALSE}
+options(mysql = list(
+  "host" = "127.0.0.1",
+  "port" = 3306,
+  "user" = "root",
+  "password" = "dolphin"
+))
+
+# Top secret MySql info
+
+```
+
+
+## NoSQL Assignment
+
+For this assignment, you should take information from a relational database and migrate it to a NoSQL database of your own choosing.
+
+For the relational database, you might use the flights database, the tb database, the "data skills" database your team created for Project 3, or another database of your own choosing or creation.
+
+## Libraries Used and Connection String
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+library(RMySQL)
+library(DBI)
+library(tidyverse)
+library(mongolite)
+library(DT)
+```
+
+## My Approach
+
+My approach for this assignment will be to use a local MySQL database in conjunction with a newly created MongoDB Cloud database. Key steps follow:
+
+1. Use DBI library to connect to MySQL database
+2. Read arilines table from flights database that was created during Assignment 2
+4. Use Mongolite library to Connect To Mongodb
+5. Insert data (airlines table) into MongoDB
+6. Query MongoDB database and display results
+7. Discuss MongoDB advantages/disadvantage
+
+
+## Connect to MySQL database
+
+Connect to my local MySQL database that includes six tables that comprise the Flight database used in Assignment 2. I will focus on the airlines table. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+databaseName <- "flights"
+db <- dbConnect(MySQL(), dbname = databaseName, host = options()$mysql$host, 
+                  port = options()$mysql$port, user = options()$mysql$user, 
+                  password = options()$mysql$password)
+
+```
+
+## Read airlines Table 
+
+Uses the db connection to read the airlines table and then disconnect.
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+airlines <- dbReadTable(db, "airlines")
+dbDisconnect(db)
+```
+
+
+## Connect to MongoDb 
+
+Connects to MongoDB and counts the collections. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+
+mymongourl <- "mongodb+srv://Mundy:UUKRC#XrRx7a6at@cluster0-xoppi.mongodb.net/test?retryWrites=true&w=majority"
+mdb <- mongo(collection = "airlines" , db = "flights" , url= mymongourl)
+
+mdb$count("{}")
+
+
+```
+
+
+## Insert Data Into MongoDB
+
+This chunk checks to see if the table already exists. If so, it drops the table and reinserts it, otherwise it will just perform the insert. You can see this process in the HTML output. The count will go from 16 to 0 to 16. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+if(mdb$count() > 0) mdb$drop()
+mdb$count("{}")
+mdb$insert(airlines)
+mdb$count("{}")
+
+```
+
+
+## Query MongoDB To Ensure The Migration Was Sucessful
+
+To confirm the migration was sucessful, I query MongoDB and display the results in a datatable.
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+airlines <- mdb$find('{}')
+datatable(airlines)
+
+```
+
+
+## NoSQL Advantages and Disadvantages
+
+```{}
+NoSQL is tailor made for unstructured data. Conversely, SQL databases are well suited to structured data. For example, NoSQL may be used to store profile data because it could be more flexible it the items stored compared to a SQL database. Content management systems are another example where the flexibility of the NOSQL data model would excel. Conversely, SQL databases excel when the data lends itself to being structured and/or normalized. 
+
+Some advantages and disadvantages of NoSQL follow:
+
+Advantages:
+- Handles large volumes of data
+- Good for quick iteration and frequent code pushes
+- OO programming
+- Architecture scales well
+- Large range of potential data models
+
+Disadvantages:
+- Weak transaction managements
+- Lare document size 
+- Backups are a weak point
+- Not as standardized as SQL
+
+Interestingly, I have been thinking how one might go about saving nested list structures that are created in the tidyverse. I would think that MongoDB may be well suited for storing such structures. This is an area I plan to research more.
+
+```
