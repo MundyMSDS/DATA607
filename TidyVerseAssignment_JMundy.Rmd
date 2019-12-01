@@ -1,0 +1,291 @@
+---
+title: "DATA 607 - Tidyverse Assignment"
+author: "Jim Mundy"
+output:
+  html_document:
+    css:
+    highlight: pygments
+    theme: cerulean
+    toc: true
+    toc_float: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(DT)
+library(ggthemes)
+
+chngName <- function(x){
+  
+}
+
+```
+## My Approach
+
+__In this assignment we will leverage the five verbs for dplyr to recreate a Five Thirty Eight Viz on Baseball Team Payrolls and Win Percentages. The data for this project will be imported from Kagle.  We will then seek to leverage the tidyverse and the Five Verbs Of dpyr to recreate the Five Thirty-Eight Viz on the importance of baseball team payrolls.  Before we get started, however, we will first review dplyr's five verbs and what we can do with them.__ 
+
+__You can checkout the FiveThirtyEight article here:__
+
+https://fivethirtyeight.com/features/how-your-favorite-baseball-team-blows-its-money/
+
+_Inspiration for this vingette came from The Yhat Blog - July 20, 2015-The Code Behind Building a FiveThirtyEight post._
+
+## dplyr's FIVE VERBS
+
+__dplyr is a package in the Tidyverse. Its primary purpose is to manipulate data frames.The name dplyr is a play on words that seeks to combine the word data with pliers - dplyr for short. In the same way a handyman might use a pair of pliers to shape and/or transform wire or metal, the data scientist can use dplyr's five verbs to shape and/or transform her data frames. dplyr's five verbs follow:__
+
+1. __Arrange__
+2. __Select__ 
+3. __Filter__
+4. __Mutate__
+5. __Summarize__
+
+__The magic of dplyr is that these five simple words enable the data scientiest to complete 80 to 90 percent of the data manipulation that is required for various data science task.  When compbined with other tidyverse packages and base r the data scientist have everything she could need to complete the task at hand.__
+
+__Here's a brief overview of each of the verbs. We will use a teams Tibble in our example. 
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+teams <- 
+    tibble(
+        name = c("Red Sox", "Rays", "Yankees", "Blue Jays", "Orioles"),
+        order = c(3,2,1,4,5),
+        wins = c(88,96,103,76,50),
+        games= c(162,162,162,162,162))
+```
+
+
+
+### Arrange 
+ __Arrange is the sorter in chief.  This verb is used to change the order of data frame rows, similar to Excel's sort function.  By default Arrange sorts in ascending order. To sort in descending order simply use the desc() modifier. The examples below use arrange to sort in ascending and descending order__
+ 
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+t<- teams %>% 
+ arrange(order)  # default ascending order sort
+t
+
+t<- teams %>% 
+ arrange(desc(order))  #use desc() to sort in descending order
+t
+```
+
+### Select
+
+__Select picks variables (columns) based on their names.  Select allows you to rapidly zoom in on a useful subset of coloumns based on the names of the variables. Select also enjoys a number of predicates and helper function that make it even easier to get to the data one wants. Here is SELECT in action:__
+
+```{r}
+# Select columns by name
+teams %>% 
+  select(name, wins, games)
+# Select all columns between order and games (inclusive)
+teams %>% 
+  select(order:games)
+# Select all columns except those from order to games (inclusive)
+teams %>% 
+  select(-(order:games))
+
+
+```
+
+__There are a number of helper functions you can use within select():__
+
+__starts_with("abc")__: matches names that begin with “abc”.
+
+__ends_with("xyz")__: matches names that end with “xyz”.
+
+__contains("ijk")__: matches names that contain “ijk”.
+
+__matches("(.)\\1")__: selects variables that match a regular expression. This one matches any variables that contain repeated characters. You’ll learn more about regular expressions in strings. 
+
+__num_range("x", 1:3)__: matches x1, x2 and x3.
+
+
+### Filter
+
+__Filter picks observations (rows) based on their values. The first argument is the name of the data frame. The second and subsequent arguments are the expressions that filter the data frame.  Filter leverages both comparison (==, >, <) and logical (& (and) and |(or)) operators, thus enabling the data scientist to filtr using an infinite number of criteria. Check out some of the examples below:__
+
+```{r}
+# filter wins greater than 60
+teams %>% 
+  filter(wins >60)
+# filter wins greater than 60 and less than 100
+teams %>% 
+  filter(wins >60, wins <100)
+#filter teams equal to Yankees
+teams %>% 
+  filter(name == "Yankees")
+#filter teams equal to Yankees or Red Sox
+teams %>% 
+  filter(name == "Yankees" | name == "Red Sox")
+#filter using in allows you to filter x if its one of the values in y
+teams %>% 
+  filter(wins %in% c(96,103))
+
+
+```
+
+
+### Mutate
+
+__Mutate adds new variables that are functions of existing variables. Mutate will add columns to the end of your tibble (data frame). If you only want to keep new columns you can use transmute instead of mutate.  We will add some new columns to our teams tibble to demonstrate:__
+
+```{r}
+# Add win percentage to teams
+teams <- teams %>% 
+  mutate(win_percentage = wins / games)
+# Add team name in Capital Letters
+teams <- teams %>% 
+  mutate(team_in_caps= str_to_upper(name))
+# Add team losses to the team tibble
+teams <- teams %>% 
+  mutate(losses= games - wins)
+# Add a good team / bad team column to the teams tibble
+teams <- teams %>% 
+  mutate(goodOrbad = if_else((wins/games) < 0.5,"BAD", "GOOD")) %>% 
+  arrange(desc(wins))
+
+teams
+```
+
+
+### Summarize
+
+__Summarize reduces multiple values down to a single summary row. Summarize is most useful when paired with group_by(). This changes the unit of analysis from the complete dataset to individual groups. Then, when you use the dplyr verbs on a grouped data frame they’ll be automatically applied “by group”. Here are some examples of using summarize. We'll have more in our Five Thirty Eight project below.__
+
+```{r}
+
+summary <- teams %>% 
+  group_by(goodOrbad) %>% 
+  summarise(
+    mostwins = max(wins),
+    leastwins = min(wins),
+    avgwins = mean(wins),
+    totalwins =sum(wins)
+  )
+
+
+summary
+```
+
+#### That's a summary of dpyr's verbs! In the following sections you can see these verbs in action and how they enable the data scientist to wrangle her data to the desired shape, size or configuration.  Checkout the code comments to see how it works.
+
+
+
+## Import Data
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+s <- read_csv("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/Salaries.csv")
+t <- read_csv("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/Teams.csv")
+
+#Filter dates greater than 1984 and select the 4 columns of interest
+t <- t %>% 
+  filter(yearID > 1984) %>% 
+  select(teamID, yearID, G, W) 
+  
+
+#Group by Teams and Year, so Summarize can calculate est_payroll by summing individual player salaries
+s <- s %>% 
+  group_by(yearID, teamID) %>% 
+  summarise(est_payroll = sum(salary))
+
+#Arrange (sort) t by yearID and teamID so you feel more organized
+#Use mutate to create the Team winning percentages (wins / games) column
+#Select three columns of interest (teamID, yearID wpct)
+
+t <- t %>% 
+  arrange(yearID, teamID) %>% 
+  mutate(wpct = (W/G)) %>% 
+  select(teamID, yearID, wpct)
+
+#Join the s and t tibbles to create data frame df
+df <- inner_join(s, t, by = c("yearID" = "yearID", "teamID" = "teamID"))
+```
+
+
+
+## Team Colors csv
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+#Use Readr to import the team colors file
+team_colors <- read_csv("https://raw.githubusercontent.com/MundyMSDS/DATA607/master/team-colors.csv")
+
+
+# Merge team colors file with data fram df
+df <- merge(df, team_colors, by.x="teamID", by.y="tm")
+
+
+```
+
+
+## League Mean Payroll & SD
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+yearly_payroll <- df %>% 
+  #Use the dynamic duo of group_by and summarize to create two new columns (mean_payroll and std_payroll)
+  group_by(yearID) %>% 
+  summarise(
+    mean_payroll=mean(est_payroll, na.rm=TRUE),
+    std_payroll=sd(est_payroll, na.rm=TRUE)
+  )
+
+
+# Merge newly calculated variable into the df data frame
+df <- merge(df, yearly_payroll, by="yearID")
+
+
+```
+
+## Standardize Payroll
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+df <- df %>% 
+  #Using our two new variable we use mutate to create standardized_payroll
+  mutate(standardized_payroll = (est_payroll - mean_payroll) / std_payroll) %>% 
+  arrange(yearID,teamID)
+
+# Now dplyr has gotten our data prepared for charting!
+
+```
+
+
+
+ggplot2
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+divisions <- c("AL East","AL Central","AL West", "NL East","NL Central","NL West")
+
+for (div in divisions) {
+  df.division <- subset(df, division==div)
+  p <- ggplot(df.division, aes(x=standardized_payroll, y=wpct, color=team_color)) + 
+    geom_point(alpha=0.75, size=3) + 
+    stat_smooth(data=within(df, teamID <- NULL), color="grey", size=.5,
+                method="lm", formula = y ~ poly(x, 2), se=FALSE) +
+    stat_smooth(size=1.5, method="lm", formula = y ~ poly(x, 2), se=FALSE) +
+    scale_color_identity() +
+    scale_x_continuous(name="Standardized Salary\n(# of standard deviations from yearly mean)",
+                       breaks=c(-2, 0, 2), limit=c(-2.5, 2.5), labels=c("-2", "0", "+2")) +
+    scale_y_continuous(name="Win/Loss %", breaks=seq(0.3, 0.7, 0.1), limit=c(0.25, 0.75)) +
+    facet_wrap(~teamID, ncol=5, scales="free_x") +
+    theme_fivethirtyeight() +
+    ggtitle(div)
+
+  ggsave(filename=paste0(div, ".png"), plot=p, width=13.65, height=3.59)
+  
+  
+}
+
+```
+
+## How Does Your Favorite Baseball Team Spend Its Money
+#### Win Percentage vs Standard Deviation From Average Salary
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/AL East.png)
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/AL Central.png)
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/AL West.png)
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/NL East.png)
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/NL Central.png)
+![](C:/Users/mutue/OneDrive/Documents/DATA607/TidyVerse Assignment/NL West.png)
