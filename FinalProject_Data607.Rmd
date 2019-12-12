@@ -1,0 +1,740 @@
+---
+title: "DATA 607 - Final Project"
+author: ""
+output:
+  html_document:
+    css: final.css
+    code_folding: "hide"
+    highlight: pygments
+    theme: cerulean
+    toc: false
+    toc_float: false
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(DT)
+library(visdat)
+library(skimr)
+library(anomalize)
+library(ggthemes)
+library(modelr)
+library(splines)
+library(broom)
+getSecs <- function(t) {
+  a <- as.numeric(str_extract(t,"^(\\d)"))* 60
+  b <- as.numeric(str_extract(t,"(.){5}$"))* 1
+  getSecs <- a + b
+}
+
+#Factor Levels
+surface_levels <- c("Dirt", "Turf", "Outer Turf")
+fs <- c("s", "m", "l")
+rs_levels <- c("Ldr" ,"EP", "MP", "Clsr" )
+distance_levels <- c("6 Furlongs", "6.5 Furlongs", "7 Furlongs", "8 Furlongs", "1 1/16 Miles", "1 1/8 Miles", "1 3/8 Miles", "1 1/4 Miles", "1 1/2 Miles" )
+```
+
+
+<hr class="my-4">
+
+# {.tabset .tabset-fade}
+
+ </br>
+
+## Final Project
+
+<div class="jumbotron">
+  </br>
+  <h3 class="display-3">Understanding Ground Loss in Horse Racing</h3>
+  <p class="lead">An Analysis of Trakus Race Distance Data With R.</p>
+  <hr class="my-4">
+  <p>Author: James Mundy</p>
+  <p>Date: December 11, 2019 </p>
+  </br>
+  </br>
+  <h3 class="display-3">Abstract</h3>
+  </br>
+  <p>In horse racing, the winner is not always the fastest horse. The distance run by each horse is also a key determinant.  Historically, horseplayers have reflected ground loss in their pre-race analysis by making a somewhat generic adjustment to each horse that was likely to race wide.</p>    
+ </br>
+<p>This analysis seeks to develop a better understanding of ground loss and to answer the following questions:</p>
+<ul>
+<li style="font-size:17px;">Does field size (the number of horses in a race) play a role in ground loss?</li>
+<li style="font-size:17px;">Does running style have a positive or negative impact on ground loss?</li>
+<li style="font-size:17px;">Could a ground loss model be employed to gain a competitive advantage?</li>
+</ul>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+  </br>
+   </br>
+  </br>
+  </br>
+  </br>
+  </br>
+</div>
+
+
+
+
+## Data 
+
+<div class="jumbotron">
+  <h3 class="display-3">Getting The DATA</h3>
+  <hr class="my-4">
+  <p style="font-size:17px;">The data phase of the project included screen scraping data, writing scraped data to csv files, importing a folder of csv files into a data frame and reviewing the imported data for accuracy and completeness.  Specifics steps completed can be viewed below and are listed here:</p>
+  
+ <ul>
+  <li style="font-size:17px;">Wrote script to screen scrape data</li> 
+  <li style="font-size:17px;">Loaded csv files from folder into tibble with readr:read_csv and purrr::map</li>
+  <li style="font-size:17px;">Previewed data using following functions: skimr::skim, dplyr::glimpse, visdat::viz_data</li>
+</ul>
+
+<p style="font-size:17px;">As you will see below, overall the data was in good shape and is ready for the data wrangling phase of our workflow.</p>
+</div>
+<br/>
+
+### Screen Sraped Data
+<hr class="my-4">
+<p style="font-size:17px;"> The screen scraping script logs into the trakus website and scrapes the race data specified in the script. The image below provides and example of the data that is scraped. For this project, I scraped all the races from Acqueduct race track for the month of December 2019. This process provided more than 24,000 obseratons, before filtering.</p>
+
+![](C:/Users/mutue/OneDrive/Documents/DATA607/FinalProject/data_scraped.PNG)
+
+### Screen Sraper Script
+
+```{r eval=FALSE}
+library(rjson)
+library(httr)
+library(XML)
+library(stringr)
+library(lubridate)
+library(tidyverse)
+
+# This script scrape data from Trakus T-Charts
+
+#Login
+login <- function(){
+  r <- POST("http://tnetwork.trakus.com/tnet/Login.aspx", body = list(TEXT_Username="JamesMundy",TEXT_Password="jamba1ayA",BUTTON_Submit="Log+In"))
+  a<-cookies(r)
+  ASP.NET_SessionID <-a[7][[1]][1]
+  userCredentials <-a[7][[1]][2]
+  ASPAUTH <-a[7][[1]][3]
+}
+
+#Convert Fraction to doubles
+mixedToFloat <- function(x){
+  is.integer  <- grepl("^\\d+$", x)
+  is.fraction <- grepl("^\\d+\\/\\d+$", x)
+  is.mixed    <- grepl("^\\d+ \\d+\\/\\d+$", x)
+  #stopifnot(all(is.integer | is.fraction | is.mixed))
+  
+  numbers <- strsplit(x, "[ /]")
+  
+  ifelse(is.integer,  as.numeric(sapply(numbers, `[`, 1)),
+         ifelse(is.fraction, as.numeric(sapply(numbers, `[`, 1)) /
+                  as.numeric(sapply(numbers, `[`, 2)),
+                as.numeric(sapply(numbers, `[`, 1)) +
+                  as.numeric(sapply(numbers, `[`, 2)) /
+                  as.numeric(sapply(numbers, `[`, 3))))
+}
+
+getLengths <- function(x){
+  case_when(
+    x == "Neck" ~ 0.25,
+    x == "Head" ~ 0.1,
+    x == "Nose" ~ 0.05,
+    nchar(x) > 0 ~ mixedToFloat(x),
+    TRUE ~ 0
+  )
+  
+}
+
+
+
+#Match Abbreviation with VenueID
+start <- function(data,race_date)
+{
+  trk <- str_to_lower(data)
+  d <- mdy(race_date)
+  filedate <- str_replace_all(toString(d),"-","")
+  filename <- str_c(data,filedate,".csv", sep = '')
+  
+  
+  setwd(file.path("C:","Users", "mutue", "OneDrive", "Documents", "TimeForm", "Data", "TCharts"))
+  l <- list(CD = 18,BEL = 23,DM = 10,GP = 20,TAM = 21,AQU = 24,SA = 4,SAR = 25,KEE = 7)
+  cat(l[[data]],race_date)
+  login()
+  race_program(l[[data]],race_date,filename)
+}
+
+#Go to specific date and track
+race_program <- function(V_ID,race_date,filename){
+  
+  tchartConn <<-file(filename,"w")
+  
+  url <-paste(c('http://tnetwork.trakus.com/tnet/t_RaceDay.aspx?VenueID=',toString(V_ID),'&Type=TBRED&Date=',toString(race_date)),collapse='')
+  r <- GET(url)
+  temp<-content(r, "text")
+  doc <- htmlParse(temp)
+  #Grab all event id
+  temp_event_id_list<-xpathSApply(doc,"//a[contains(@href,'t_Recap.aspx?EventID=')]/@href")
+  temp_event_id_list<-substr(temp_event_id_list,22,40)
+  event_id_list <- list()
+  counter<-1
+  #Scrape through each event
+  for( i in temp_event_id_list)
+  {
+    event_id_list[counter]<-i
+    counter<-counter+1
+    race_detail(i, tchartConn)
+  }
+  close(tchartConn, type ='w')
+  
+}
+
+#Scrape Race in every range
+race_detail <- function(event_id, f){
+  
+  url <- paste(c('http://tnetwork.trakus.com/tnet/t_Recap.aspx?EventID=',toString(event_id),'&PostSelect=0'),collapse='')
+  r <- GET(url)
+  temp<-content(r, "text")
+  doc <- htmlParse(temp)
+  race_info<-xpathSApply(doc,"//*[@class=\"recapTextHeader\"]/td/div")[[1]]
+  race_info<-toString(xmlValue(race_info))
+  #race_info<-paste(c(toString(xmlValue(race_info[1]$text)),toString(xmlValue(race_info[3]$i)),toString(xmlValue(race_info[5]$text)),toString(xmlValue(race_info[7]$text)),toString(xmlValue(race_info[9]$text))),collapse='|')
+  race_info <- str_replace_all(race_info,"(<).*?(>)","") 
+  race_info <- str_replace_all(race_info, "(\\s{3,200})"," ")
+
+  
+  track_name <- str_extract(race_info,'.+?(?=\\sRace)')
+  race_number <- str_extract(race_info,'(Race\\s\\d+)')
+  purse <- str_replace(str_extract(race_info, "(\\$\\d+)"),"(\\$)","")
+  race_date <- str_extract(race_info, "([A-Z][a-z]+\\s\\d+\\,\\s\\d{4})")
+  race_date <- mdy(race_date)
+  race_date <- toString(race_date)
+  distance <- str_extract(race_info,'(\\d\\sFurlongs|\\d\\.\\d Furlongs|\\d\\s+\\d\\/\\d{1,2}\\sMiles)')
+  surface <- str_extract(race_info,'(Dirt|Turf|Sythetic|Outer Turf|Inner Turf)')
+  
+  final_select<-length(xpathSApply(doc,"//*[@id=\"PostSelect\"]/option"))
+  print(final_select)
+  #Loop through each segment
+  for(range_select in 2:final_select)
+  {
+    url <- paste(c('http://tnetwork.trakus.com/tnet/t_Recap.aspx?EventID=',toString(event_id),'&PostSelect=',toString(range_select)),collapse='')
+    print(url)
+    r <- GET(url)
+    temp<-content(r, "text")
+    doc <- htmlParse(temp)
+    
+    horse_num  <- x <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[2]/img",xmlAttrs)
+    horse_num <- horse_num[3,]
+    horse_num <- str_sub(horse_num,-6,-4)
+    horse_num <- str_extract(horse_num,'[0-9ABC]{1,2}')
+    
+    
+    
+    horse_name <- x <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[3]",xmlValue)
+    horse_time <- x <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[4]",xmlValue)
+    horse_dist <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[5]",xmlValue)
+    horse_rail <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[6]",xmlValue)
+    horse_avg <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[7]",xmlValue)
+    horse_ahead <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[8]",xmlValue)
+    horse_ahead <- str_replace(horse_ahead,'(\\dP\\d:)',"")
+    horse_ahead <- str_replace(horse_ahead,'(\\()',"")
+    horse_ahead <- str_replace(horse_ahead,'(\\))',"")
+    horse_ahead <- getLengths(horse_ahead)
+    ifelse(horse_ahead == "","0",horse_ahead)
+    
+    
+    
+    horse_cu_time <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[11]",xmlValue)
+    horse_cu_peak <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[12]",xmlValue)
+    horse_cu_dist <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[13]",xmlValue)
+    horse_cu_delta <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[14]",xmlValue)
+    horse_cu_delta <- str_replace_all(horse_cu_delta,'---','0')
+    horse_cu_avg <-xpathSApply(doc,"//tr[@bgcolor=\"white\"]/td[15]",xmlValue)
+    
+    for(count in 1:length(horse_name))
+    {
+      
+      
+      cat(track_name, race_number, purse, race_date, distance, surface, count, range_select, horse_num[count], horse_name[count], horse_time[count],horse_dist[count],horse_rail[count],horse_avg[count],horse_ahead[count],horse_cu_time[count],horse_cu_peak[count],horse_cu_dist[count],horse_cu_delta[count],horse_cu_avg[count],'\n')
+      writeLines(paste(c(track_name, race_number, purse, race_date, distance, surface, count, range_select, horse_num[count], horse_name[count], horse_time[count],horse_dist[count],horse_rail[count],horse_avg[count],horse_ahead[count],horse_cu_time[count],horse_cu_peak[count],horse_cu_dist[count],horse_cu_delta[count],horse_cu_avg[count]),collapse = ','), f)
+  
+    }
+  }
+}
+
+
+start("AQU","12/8/2019")
+
+```
+
+<hr class="my-4">
+<br/><br/>
+
+
+### Load Data
+<hr class="my-4">
+<p style="font-size:17px;"> Map and read_csv functions are used in conjunction to load all the csv files in the TChars folders. Files are then reduced with rbind into a single data frame - tcharts.</p>
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+files <- dir("C:/Users/mutue/OneDrive/Documents/TimeForm/Data/TCharts/", full.names = T) 
+
+tchart <- files %>%
+  map(read_csv, col_names=c("trk",
+                            "rnbr","rprs","rdt","rdst","srf","pos","sxt","pst","hn","st","sdst","rf","samph","sla","ct","cpk","cdst","cdlt","camph")) %>%     # read in all the files individually, using
+                       # the function read_csv() from the readr package
+  reduce(rbind)        # reduce with rbind into one dataframe
+
+```
+<hr class="my-4">
+<br/><br/>
+
+
+### Skim Function
+<hr class="my-4">
+<p style="font-size:17px;">The skim function is an alternative to the summary function.  It displays most of the numerical attributes from summary, but it also displays missing values, more quantile information and an inline histogram for each variable.</p>
+
+```{r}
+skim(tchart)
+```
+
+<hr class="my-4">
+<br/><br/>
+
+
+### Glimpse Function
+<hr class="my-4">
+<p style="font-size:17px;">The glimpse function displays a vertical preview of the dataset.   It allows one to easily preview data type and sample data. </p>
+
+```{r}
+glimpse(tchart)
+```
+<hr class="my-4">
+<br/><br/>
+
+
+### Vis_dat Function
+<hr class="my-4">
+<p style="font-size:17px;">The Vis_dat function is a great way to visualize the data type and missing data within a data frame. </p>
+```{r}
+vis_dat(tchart)
+```
+<hr class="my-4">
+
+<a href="#top">Back to top</a>
+
+## Wrangling
+
+<div class="jumbotron">
+  <h3 class="display-3">Wrangling The Data</h3>
+  <hr class="my-4">
+  <p style="font-size:17px;">In the data wrangling portion of my workflow I utiilize several tidyverse packages and functions to change data types, rename variables, sort, filter, select and create variables. New variables added include:</p>
+  
+ <ul>
+  <li style="font-size:17px;"><b>ground loss</b> - the distance greater than the stated race distance run by a horse in feet</li>
+  <li style="font-size:17px;"><b>feet per second</b> - measure of velocity of the horse in a segment (sfps) or cummulative (cpfs)</li>
+  <li style="font-size:17px;"><b>running style</b> - captures if a horse runs on the lead, close to the lead, mid pack or from the back</li>
+  <li style="font-size:17px;"><b>field</b> - number of horses in the race</li>
+</ul>
+
+<p style="font-size:17px;">Factors were created using the Forcats package for the following variables:</p>
+
+<ul>
+  <li style="font-size:17px;"><b>Surface (srf)</b> - 3 Levels</li>
+  <li style="font-size:17px;"><b>Running Style (rs)</b> - 4 Levels</li>
+  <li style="font-size:17px;"><b>Race Distance String (rdst_str)</b> - 8 Levels</li>
+</ul>
+
+<p style="font-size:17px;">Finally, outliers were removed and the skim and viz_dat functions were utilized a second time to review the data.</p>
+
+</div>
+<br/>
+
+### Wrangling Code
+<hr class="my-4">
+<p style="font-size:17px;">Click the Code button to see data wrangling code and comments. </p>
+
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+tchart <- tchart %>% 
+  #Convert variable to double
+  mutate(rnbr = as.double(str_extract(rnbr, "(\\d+)"))) %>% 
+  mutate(rprs = as.double(str_extract(rprs, "(\\d+)"))) %>%
+  mutate(rf = as.double(rf)) %>%
+  #Adjusting sxt variable to start from 1 instead of 2 - represents each 1/16th of the race.
+  mutate(sxt = sxt-1) %>% 
+  #Creating Ground Loss, Feet Per Second
+  mutate(grdlss = (cdst- (sxt * 330))) %>% 
+  mutate(sfps = sdst / st) %>%
+  mutate(sla = if_else(is.na(sla),0,sla)) %>% 
+  #Converting cummulative time to seconds
+  mutate(ct = if_else(nchar(ct)>6,getSecs(ct),as.numeric(ct))) %>% 
+  #Calculate cum feet per second
+  mutate(cfps = as.numeric(cdst) / as.numeric(ct)) %>%
+  group_by(trk, rdt, rnbr, sxt) %>% 
+  mutate(field = max(pos)) %>%
+  mutate(bf = cumsum(sla) - sla) %>% 
+  mutate(bf =  bf * 9) %>% 
+  mutate(rsv = bf/max(bf)) %>% 
+  ungroup() %>% 
+  #Start of Running Style creation
+  group_by(trk, rdt, rnbr) %>% 
+  mutate(rsv = if_else(max(sxt)<16 & sxt==4, rsv,NA_real_)) %>%
+  mutate(rsv = if_else(max(sxt)>=16 & sxt==8, bf/max(bf),rsv)) %>%
+  mutate(rsbf = if_else(max(sxt)<16 & sxt==4, bf,NA_real_)) %>%
+  mutate(rsbf = if_else(max(sxt)>=16 & sxt==8, bf,rsbf)) %>%
+  ungroup() %>% 
+  group_by(trk, rdt, rnbr, sxt) %>%
+  mutate(rail_rank = min_rank(rf)) %>% 
+  mutate(has_entry = if_else(str_detect(pst,"([A-Z])"),1L,NA_integer_)) %>% 
+  mutate(rail_rank = if_else(sxt == 1, rail_rank, NA_integer_)) %>% 
+  arrange(desc(has_entry)) %>%
+  fill(has_entry) %>% 
+  arrange(sxt) %>% 
+  ungroup() %>% 
+  #Calculate Running Style For Horses
+  group_by(trk, rdt, rnbr, hn) %>%
+  fill(rail_rank) %>% 
+  arrange(trk, rdt, rnbr, hn, rsv) %>% 
+  fill(rsv) %>% 
+  fill(rsbf) %>% 
+  #Completing Running Style Calculation
+  mutate(rs = case_when(
+         rsbf < 5.00 ~ "Ldr",
+         rsv <= 0.333 ~ "EP",
+         rsv <=0.66 ~ "MP",
+         rsv <=1 ~ "Clsr",
+         TRUE ~ "Z")) %>% 
+  ungroup() %>% 
+  arrange(trk, rdt, rnbr,sxt,bf) %>% 
+  group_by(trk, rdt, rnbr) %>% 
+  filter(sxt==max(sxt)) %>%
+  #Create Race distance as string
+  rename(rdst_str = rdst) %>% 
+  #Create race distance as numeric
+  mutate(rdst = sxt * 330) %>% 
+  mutate(rtyp = if_else(max(sxt)<16,"S","R")) %>% 
+  
+  #Adjusting Post Position When there is an Entry 1A
+  mutate(pp = if_else(has_entry==1,rail_rank, as.integer(pst))) %>% 
+  mutate(pp = if_else(is.na(pp),as.integer(str_trim(pst)),pp)) %>%
+  ungroup() %>%  
+  
+  # Create Factors
+  mutate(srf = factor(srf,levels=surface_levels)) %>% 
+  mutate(rs = factor(rs, levels=rs_levels)) %>% 
+  mutate(rdst_str = factor(rdst_str, levels = distance_levels)) %>%
+  mutate(ppfld = if_else(pp <= field,log10(pp*field),0)) %>% 
+  mutate(fs = if_else(field <=5, "s",if_else(field>9,"l","m"))) %>% 
+  
+  #Exclude turf races because of relatively small sample this time of year
+  filter(srf == "Dirt") %>%  
+  #Exclude race greater than 1 mile.  Not many races greater than a mile were run in November 2019
+  filter(rdst <= 5280) %>% 
+  filter(pp > 0) %>%
+  select(trk, rdt, rnbr, rdst_str, rdst, srf, field, pp, hn, pos, rs, ppfld, grdlss, cdst, fs)
+
+
+```
+<hr class="my-4">
+<br/><br/>
+
+### Skim Function
+<hr class="my-4">
+<p style="font-size:17px;">Review data again after data wrangling has been completed. </p>
+
+```{r}
+skim(tchart)
+```
+
+<hr class="my-4">
+<br/><br/>
+
+### Vis_dat Function
+<hr class="my-4">
+<p style="font-size:17px;">Viz_dat again confirms there is no missing data. </p>
+```{r}
+vis_dat(tchart)
+```
+
+<hr class="my-4">
+<br/><br/>
+
+### Outliers and Small N
+<hr class="my-4">
+<p style="font-size:17px;">Box plots identify outliers so they can be removed from the data set. We are now ready to advance to the Explore phase of the workflow.</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+  
+p <- ggplot(tchart, aes(x=rdst_str, y=grdlss, fill=rdst_str)) +
+    geom_boxplot(alpha=0.7) +
+    stat_summary(fun.y=mean, geom="point", shape=20, size=5, color="red", fill="red") +
+    theme(legend.position="none") +
+    ylim(0, 150) +
+    theme_fivethirtyeight()
+  
+  
+ p + theme(legend.position = "none") 
+ 
+ tchart <- tchart %>% 
+  mutate(outlier = if_else((rdst_str=="6 Furlongs" | rdst_str == "6.5 Furlongs") & grdlss > 100, 1,0)) %>% 
+  filter(outlier == 0)
+ 
+
+p <- ggplot(tchart, aes(x=rdst_str, y=grdlss, fill=rdst_str)) +
+    geom_boxplot(alpha=0.7) +
+    stat_summary(fun.y=mean, geom="point", shape=20, size=5, color="red", fill="red") +
+    theme(legend.position="none") +
+    ylim(0, 150) +
+    theme_fivethirtyeight()
+  
+  
+ p + theme(legend.position = "none") 
+```
+<hr class="my-4">
+<br/><br/>
+
+
+<a href="#top">Back to top</a>
+
+## Explore
+
+<div class="jumbotron">
+  <h3 class="display-3">Exploring The Data</h3>
+  <hr class="my-4">
+  <p style="font-size:17px;">We will begin to answer questions about distribution, correlation. The answers to these questions have implication on our modeling phase and should begin to answer the questions on the impact of field size and running style on ground loss. </p>
+  
+</div>
+
+
+### Ground Loss By Distance and Running Style
+<hr class="my-4">
+<p style="font-size:17px;">We will start the explore phase with density plots of response variable - Ground Loss. Does this variable have a normal distribution?</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+  ggplot(tchart, aes(grdlss))+
+  scale_x_log10() +
+  geom_density(fill="blue", color="blue") +
+  facet_grid(rs ~ rdst_str, scale = "free") +
+  labs(x=element_blank(), y= element_blank()) +
+  theme_fivethirtyeight()
+
+```
+<hr class="my-4">
+<br/><br/>
+
+### Ground Loss By Distance and Post Position
+<hr class="my-4">
+<p style="font-size:17px;">Field size is define here as small (five or less), medium (6 -9) or large (10+).</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+  ggplot(tchart, aes(grdlss))+
+  scale_x_log10() +
+  geom_density(fill="blue", color="blue") +
+  facet_grid(pp ~ rdst_str, scale = "free") +
+  labs(x=element_blank(), y= element_blank()) +
+  theme_fivethirtyeight()
+
+```
+<hr class="my-4">
+<br/><br/>
+
+
+### Ground Loss By Distance and Field Size ((l)arge, (m)edium, (s)mall)
+<hr class="my-4">
+<p style="font-size:17px;">Field size is define here as small (five or less), medium (6 -9) or large (10+).</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+  ggplot(tchart, aes(grdlss))+
+  scale_x_log10() +
+  geom_density(fill="blue", color="blue") +
+  facet_grid(fs ~ rdst_str, scale = "free") +
+  labs(x=element_blank(), y= element_blank()) +
+  theme_fivethirtyeight()
+
+```
+<hr class="my-4">
+<br/><br/>
+
+
+### Correlation With Ground Loss (log10) - Post Position by Distance and Running Style 
+<hr class="my-4">
+<p style="font-size:17px;">Our Post Position by distance and running style makes a strong argument for running style making a difference in ground loss.</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE} 
+
+  p <- ggplot(data = tchart, mapping = aes(x = pp, y = grdlss)) +
+    geom_point(alpha = 0.2) +
+    scale_y_log10() +
+    scale_x_log10() +
+    geom_smooth() +
+    facet_grid(rs ~ rdst_str) +
+    theme_fivethirtyeight()
+ p
+```
+<hr class="my-4">
+<br/><br/>
+
+
+### Correlation With Ground Loss (log10) - Field Size by Distance and Running Style
+<hr class="my-4">
+<p style="font-size:17px;">We will begin to answer questions about distribution, correlation. The answers to these questions will determine  our ability to successfully model our response variable - ground loss. We will start this excercise by creating a data frames for our numeric and character variable</p>
+```{r echo=TRUE, warning=FALSE, message=FALSE} 
+
+  p <- ggplot(data = tchart, mapping = aes(x = field, y = grdlss)) +
+    geom_point(alpha = 0.2) +
+    scale_y_log10() +
+    scale_x_log10() +
+    geom_smooth() +
+    facet_grid(rs ~ rdst_str) +
+    theme_fivethirtyeight()
+ p
+```
+<hr class="my-4">
+<br/><br/>
+
+
+<a href="#top">Back to top</a>
+
+## Model
+
+<div class="jumbotron">
+  <h3 class="display-3">Building Models</h3>
+  <hr class="my-4">
+  <p style="font-size:17px;">The modeling strategy was a many models approach. Specifically, nesting was utilized to create specific models at the intersection of running style and race distance. Traditional Linear (lm) and linear with spline (lm w/ ns()) were employed. The broom package is used to display modeling resuls:</p>
+  
+</div>
+</br>
+
+### Model 1 
+<hr class="my-4">
+<p style="font-size:17px;">Model 1 is nested (a model for each nested group) linear model thas has been applied to the Running stlye and Race Distance Group.  For example for each combination of running style and race distance, a model is calculated. The model is defined as:</p>
+
+<ul> 
+<li><b>lm(log(grdlss) ~ pp +log(field))</b> </li>
+</ul>
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+t1 <- tchart %>% 
+  nest(-rs, -rdst_str) %>% 
+  mutate(mod1 = map(data, ~ lm(log(grdlss) ~ pp +log(field) , data = .)),
+         results = map(mod1, glance)) %>% 
+  unnest(results) %>% 
+  select(rdst_str, rs, r.squared, adj.r.squared, statistic, p.value)
+```
+
+
+### Model 1 Results
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+datatable(t1)
+
+ggplot(data = t1, aes(x = factor(rs), y = r.squared)) +
+    geom_bar(stat = "identity", aes(fill =p.value)) +
+    facet_grid(~rdst_str) +
+    labs(x = "Running Style", y = expression(R^{2}))
+
+
+```
+
+
+### Model 2 
+<hr class="my-4">
+<p style="font-size:17px;">Similar Model 1, Model 2 is nest spline model thas has also been applied to the Running stlye and Race Distance Group. The model is defined as: </p>
+
+<ul> 
+<li><b>lm(log(grdlss) ~ ns(pp, df=5))</b> </li>
+</ul>
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+t2 <- tchart %>% 
+  nest(-rs, -rdst_str) %>% 
+  mutate(mod4 = map(data, ~ lm(log(grdlss) ~ ns(pp, df = 3), data = .)),
+         results = map(mod4, glance)) %>% 
+  unnest(results) %>% 
+  select(rdst_str, rs, r.squared, adj.r.squared, statistic, p.value)
+
+
+```
+
+### Model 2 Results
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+datatable(t2)
+
+ggplot(data = t2, aes(x = factor(rs), y = r.squared)) +
+    geom_bar(stat = "identity", aes(fill =p.value)) +
+    facet_grid(~rdst_str) +
+    labs(x = "Running Style", y = expression(R^{2}))
+```
+
+
+<a href="#top">Back to top</a>
+
+## Communicate
+
+<div class="jumbotron">
+  <h3 class="display-3">The Findings</h3>
+  <hr class="my-4">
+  <p style="font-size:17px;">What are the answers to the questions posed at the beginning of this analysis. </p>
+  
+</div>
+</br>
+
+### Questions and Answers
+
+<ul>
+  <li style="font-size:17px;">Does field size (the number of horses in a race) play a role in ground loss?</li>
+</br>
+  <p style="font-size:17px;"><b>Yes, I believe the box plots below support the premise that field size does implact ground loss. Additionally, it would appear that dispersion of ground loss is also positively correlated with field size.</b> </p>
+
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+p <- ggplot(tchart, aes(rs, grdlss)) +
+     geom_boxplot() +
+     facet_grid(rdst_str~ fs) +
+    theme_fivethirtyeight()
+
+p
+
+```
+</br>
+</br>
+  <li style="font-size:17px;">Does running style have a positive or negative impact on ground loss?</li>
+  </br>
+  <p style="font-size:17px;"><b>It appears that running style can have both a postive and/or negative impact on ground loss. This is evident in the visualizations below, which may also reflect jockey tactics.</b> </p>
+  
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+
+p <- ggplot(data = tchart, mapping = aes(x = field, y = grdlss)) +
+    geom_point(alpha = 0.2) +
+    scale_y_log10() +
+    scale_x_log10() +
+    geom_smooth() +
+    facet_grid(rs ~ rdst_str) +
+    theme_fivethirtyeight()
+ p
+```
+</br>  
+</br>
+  <li style="font-size:17px;">Could a ground loss model be employed to gain a competitive advantage?</li>
+  </br>
+ <p style="font-size:17px;"><b>Yes, I belive a ground loss model could provide a competative advantage.  Unfortunately, the models in this analysis are not that model. I do believe, however, that multiple models is the correct approach and that with more data and the correct model construction a robust value-added model is possible.</b> </p>
+ 
+</ul>
+
+<a href="#top">Back to top</a>
+
